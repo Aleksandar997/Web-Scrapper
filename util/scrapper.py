@@ -1,6 +1,7 @@
 from logging import Logger
 from urllib.request import urlopen, Request
-import codecs
+from urllib.parse import urljoin
+import io
 from bs4 import BeautifulSoup
 import uuid
 import threading
@@ -9,6 +10,7 @@ import time
 import requests
 import json
 import os
+import re 
 
 api = 'http://0.0.0.0:80'
 
@@ -21,7 +23,7 @@ def __writePage(file_name: str, content: str):
     global root
     if not os.path.exists(root):
         os.mkdir(root)
-    with codecs.open(f'{root}/{file_name}.html', 'w', encoding='utf-8') as f:
+    with io.open(f'{root}/{file_name}.html', 'w', encoding='utf-8') as f:
         f.write(content)
 
 def writePage(file_name: str, content: str, exception_logger: Logger):
@@ -56,6 +58,19 @@ def scrape_process(url: str):
         loader_thread.start()
         req = Request(url, headers={'User-Agent' : 'Magic Browser'}) 
         soup = BeautifulSoup(urlopen(req), 'html.parser')
+
+        for link in soup('script', attrs={'src': re.compile(".*")}):
+            script_path = link.get('src')
+            if (str(script_path).startswith('http') == False):
+                script_path = urljoin(url, script_path)
+            f = urlopen(script_path)
+
+            encoding = 'utf-8' if f.headers.get_content_charset() == None else f.headers.get_content_charset()
+            link_url_res = f.read().decode(encoding)
+            
+            link.append(link_url_res)
+            del link['src']
+
         return (True, soup)
     except Exception as ex:
         is_error = True
@@ -108,14 +123,14 @@ def automatic_scrape():
 
         __writePage(title, content)
         
-        res = requests.post(api + '/save_scraped_content', json = {
-            "content": content,
-            "fileName": title
-        })
+        # res = requests.post(api + '/save_scraped_content', json = {
+        #     "content": content,
+        #     "fileName": title
+        # })
 
-        data = json.loads(res.text)
-        if (data['status'] != 'success'):
-            print('\nError while saving the page on the server')
+        # data = json.loads(res.text)
+        # if (data['status'] != 'success'):
+        #     print('\nError while saving the page on the server')
         
         time.sleep(0.2)
         is_loading = False
